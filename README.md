@@ -31,7 +31,7 @@ Configure these values in `.env`:
 
 Generate a Better Auth secret with `openssl rand -base64 32`. Keep `.env` private and never commit credentials.
 
-Google sign-in is enabled when both Google variables are set. In Google Cloud Console, allow the redirect URI `${BETTER_AUTH_URL}/api/auth/callback/google` (for local development, `http://localhost:8000/api/auth/callback/google`).
+Google sign-in is enabled when both Google variables are set. In Google Cloud Console, allow the redirect URI `${BETTER_AUTH_URL}/api/auth/callback/google` (for local development, `http://localhost:3000/api/auth/callback/google`).
 
 Better Auth stores users, sessions, accounts, verifications, and signing keys in the existing `MONGODB_DB_NAME` database. It does not create a separate authentication database.
 
@@ -80,7 +80,7 @@ Book image upload and image-hosting integration are not implemented. No image pr
 
 ## Deployment
 
-For Render, create a Web Service from the `booknook-server` repository with Node.js 20 or newer, build command `npm ci`, and start command `npm start`. Set the required environment variables listed above in the Render dashboard, plus `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` together only if Google sign-in is enabled. Set `CLIENT_URL` to the exact deployed frontend origin and `BETTER_AUTH_URL` to the backend's public origin. Render supplies `PORT`; the server uses it when present. Configure the health check path as `/health`.
+For Render, create a Web Service from the `booknook-server` repository with Node.js 20 or newer, build command `npm ci`, and start command `npm start`. Set the required environment variables listed above in the Render dashboard, plus `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` together only if Google sign-in is enabled. Set both `CLIENT_URL` and `BETTER_AUTH_URL` to the exact public Vercel frontend origin. Vercel rewrites browser `/api/*` requests to the Render API, so Better Auth cookies and OAuth callbacks remain on the frontend origin. Render supplies `PORT`; the server uses it when present. Configure the health check path as `/health`.
 
 If Google sign-in is enabled, configure both Google credentials and allow `${BETTER_AUTH_URL}/api/auth/callback/google` in Google Cloud Console. This repository has no provider-specific deployment configuration, and a production deployment has not been verified. See [MongoDB Atlas configuration](#mongodb-atlas-configuration) for database and transaction requirements.
 
