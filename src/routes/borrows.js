@@ -126,7 +126,7 @@ export function createBorrowsRouter({
     }
   });
 
-  router.patch("/:id/return", async (req, res, next) => {
+  const returnBorrow = async (req, res, next) => {
     const borrowId = toObjectId(req.params.id);
     if (!borrowId) {
       return res.status(404).json({ message: "Borrow record not found." });
@@ -175,7 +175,10 @@ export function createBorrowsRouter({
     } finally {
       await session.endSession();
     }
-  });
+  };
+
+  router.patch("/:id/return", returnBorrow);
+  router.delete("/:id", returnBorrow);
 
   return router;
 }

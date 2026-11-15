@@ -32,9 +32,9 @@ The server validates its environment settings and verifies the MongoDB connectio
 
 ## Book API
 
-All `/api/books` routes require a Better Auth JWT. `GET` lists the authenticated user's books, `POST` creates a book with `title`, `author`, and `category` (and optional `description`, `availableCopies`, and `isShared`), `PATCH /:id` updates supplied fields, and `DELETE /:id` removes a book. Books are private by default; only books explicitly shared by their owner appear at `GET /api/books/catalog` and `GET /api/books/catalog/:id`.
+All `/api/books` routes require a Better Auth JWT. `GET /` lists the authenticated user's books, `GET /:id` returns a book owned by the user or explicitly shared by its owner, `POST` creates a book with `title`, `author`, and `category` (and optional `description`, `availableCopies`, and `isShared`), `PATCH /:id` updates supplied fields, and `DELETE /:id` removes an owned book. Books are private by default; only books explicitly shared by their owner appear at `GET /api/books/catalog` and `GET /api/books/catalog/:id`.
 
-`GET /api/borrows` lists the authenticated user's borrowing history. `POST /api/borrows` accepts only a `bookId`; `PATCH /api/borrows/:id/return` returns that user's active loan. Borrowing and returning use MongoDB transactions to keep stock and loan records in sync, so the database must support transactions (MongoDB Atlas does).
+`GET /api/borrows` lists the authenticated user's borrowing history. `POST /api/borrows` accepts only a `bookId`; `PATCH /api/borrows/:id/return` and `DELETE /api/borrows/:id` return that user's active loan without deleting its history record. Borrowing and returning use MongoDB transactions to keep stock and loan records in sync, so the database must support transactions (MongoDB Atlas does).
 
 ## Scripts
 

@@ -128,6 +128,25 @@ export function createBooksRouter({
     return res.status(200).json({ book: serializeBook(book, req.auth.userId) });
   });
 
+  router.get("/:id", async (req, res) => {
+    const id = toObjectId(req.params.id);
+    if (!id) {
+      return res.status(404).json({ message: "Book not found." });
+    }
+
+    let book = await collection.findOne({
+      _id: id,
+      ownerId: req.auth.userId,
+    });
+    if (!book) {
+      book = await collection.findOne({ _id: id, isShared: true });
+    }
+    if (!book) {
+      return res.status(404).json({ message: "Book not found." });
+    }
+    return res.status(200).json({ book: serializeBook(book, req.auth.userId) });
+  });
+
   router.get("/", async (req, res) => {
     const books = await collection
       .find({ ownerId: req.auth.userId })

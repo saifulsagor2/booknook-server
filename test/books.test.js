@@ -198,6 +198,17 @@ test("book CRUD is authenticated and scoped to the owning user", async (t) => {
   assert.equal(createdBook.description, "A story by the sea.");
   assert.equal("ownerId" in createdBook, false);
 
+  const ownerDetailsResponse = await fetch(`${url}/${createdBook.id}`, {
+    headers: jsonHeaders("reader-one"),
+  });
+  assert.equal(ownerDetailsResponse.status, 200);
+  assert.equal((await ownerDetailsResponse.json()).book.id, createdBook.id);
+
+  const privateDetailsResponse = await fetch(`${url}/${createdBook.id}`, {
+    headers: jsonHeaders("reader-two"),
+  });
+  assert.equal(privateDetailsResponse.status, 404);
+
   const ownerBooksResponse = await fetch(url, {
     headers: jsonHeaders("reader-one"),
   });
@@ -310,6 +321,12 @@ test("only explicitly shared books appear in the authenticated catalog", async (
   const catalog = await catalogResponse.json();
   assert.deepEqual(catalog.books.map((book) => book.id), [sharedBook.id]);
   assert.equal(catalog.books[0].canBorrow, true);
+
+  const sharedDetails = await fetch(`${url}/${sharedBook.id}`, {
+    headers: jsonHeaders("reader-two"),
+  });
+  assert.equal(sharedDetails.status, 200);
+  assert.equal((await sharedDetails.json()).book.id, sharedBook.id);
 
   const privateDetails = await fetch(`${url}/catalog/${privateBook.id}`, {
     headers: jsonHeaders("reader-two"),

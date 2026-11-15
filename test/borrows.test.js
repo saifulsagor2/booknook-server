@@ -197,6 +197,38 @@ test("borrow and return are owner-scoped, duplicate-safe, and restore one copy",
   assert.equal((await booksCollection.findOne({ _id: book._id })).availableCopies, 1);
 });
 
+test("DELETE /:id returns the borrow and keeps its history", async (t) => {
+  const book = createBook();
+  const booksCollection = createMemoryCollection([book]);
+  const borrowsCollection = createMemoryCollection();
+  const url = await startBorrowServer(t, booksCollection, borrowsCollection);
+
+  const createdResponse = await fetch(url, {
+    method: "POST",
+    headers: headers("reader-one", { bookId: book._id.toString() }),
+    body: JSON.stringify({ bookId: book._id.toString() }),
+  });
+  const { borrow } = await createdResponse.json();
+
+  const returnedResponse = await fetch(`${url}/${borrow.id}`, {
+    method: "DELETE",
+    headers: headers("reader-one"),
+  });
+  assert.equal(returnedResponse.status, 200);
+  assert.equal((await returnedResponse.json()).borrow.status, "returned");
+  assert.equal((await booksCollection.findOne({ _id: book._id })).availableCopies, 1);
+
+  const historyResponse = await fetch(url, { headers: headers("reader-one") });
+  assert.equal((await historyResponse.json()).borrows[0].status, "returned");
+
+  const repeatedReturn = await fetch(`${url}/${borrow.id}`, {
+    method: "DELETE",
+    headers: headers("reader-one"),
+  });
+  assert.equal(repeatedReturn.status, 409);
+  assert.equal((await booksCollection.findOne({ _id: book._id })).availableCopies, 1);
+});
+
 test("stock limits concurrent borrowing and owners cannot borrow their own books", async (t) => {
   const book = createBook();
   const booksCollection = createMemoryCollection([book]);
