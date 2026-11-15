@@ -35,6 +35,17 @@ Google sign-in is enabled when both Google variables are set. In Google Cloud Co
 
 Better Auth stores users, sessions, accounts, verifications, and signing keys in the existing `MONGODB_DB_NAME` database. It does not create a separate authentication database.
 
+## MongoDB Atlas configuration
+
+1. Create an Atlas cluster that supports multi-document transactions (a replica set or sharded cluster).
+2. Create a dedicated database user with read/write access to the BookNook database. Do not use Atlas account credentials as application credentials.
+3. In Atlas Network Access, allow the backend host's outbound IP addresses. Avoid allowing access from every IP address unless the deployment environment requires it and the risk is understood.
+4. In Atlas, choose **Connect → Drivers** and copy the connection string into `MONGODB_URI`. It should use the `mongodb+srv://` scheme. URL-encode special characters in the database user's password.
+5. Set `MONGODB_DB_NAME` to the database name BookNook should use (for example, `booknook`). The backend selects this database explicitly; the URI does not need to select a database.
+6. Store both values in the backend host's private environment settings, never in source control or frontend environment variables.
+
+The backend creates and uses the `books` and `borrows` collections in that database. Better Auth uses the same database for its own collections. Borrow and return operations use transactions, so a standalone MongoDB server without transaction support is not sufficient.
+
 ## Development
 
 ```sh
@@ -69,9 +80,9 @@ Book image upload and image-hosting integration are not implemented. No image pr
 
 ## Deployment
 
-Deploy the API to a Node.js 20+ host and provide the required environment variables through that host's secret manager. Use a transaction-capable MongoDB deployment, configure its network access for the API host, set `CLIENT_URL` and `BETTER_AUTH_URL` to the deployed origins, and set `PORT` if required by the host. Start the service with `npm start` and configure the deployment health check to use `GET /health`.
+For Render, create a Web Service from the `booknook-server` repository with Node.js 20 or newer, build command `npm ci`, and start command `npm start`. Set the required environment variables listed above in the Render dashboard, plus `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` together only if Google sign-in is enabled. Set `CLIENT_URL` to the exact deployed frontend origin and `BETTER_AUTH_URL` to the backend's public origin. Render supplies `PORT`; the server uses it when present. Configure the health check path as `/health`.
 
-If Google sign-in is enabled, configure both Google credentials and allow `${BETTER_AUTH_URL}/api/auth/callback/google` in Google Cloud Console. This repository has no provider-specific deployment configuration, and a production deployment has not been verified.
+If Google sign-in is enabled, configure both Google credentials and allow `${BETTER_AUTH_URL}/api/auth/callback/google` in Google Cloud Console. This repository has no provider-specific deployment configuration, and a production deployment has not been verified. See [MongoDB Atlas configuration](#mongodb-atlas-configuration) for database and transaction requirements.
 
 ## Scripts
 
