@@ -67,6 +67,24 @@ test("invalid JSON receives a client error response", async (t) => {
   });
 });
 
+test("JSON larger than the request limit receives a 413 response", async (t) => {
+  const server = createApp("http://localhost:3000").listen(0);
+  await once(server, "listening");
+  t.after(() => server.close());
+
+  const address = server.address();
+  const response = await fetch(`http://127.0.0.1:${address.port}/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ data: "x".repeat(1024 * 1024) }),
+  });
+
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), {
+    message: "Request body is too large.",
+  });
+});
+
 test("central error handling hides internal error details", () => {
   let statusCode;
   let responseBody;
