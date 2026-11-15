@@ -30,6 +30,10 @@ npm run dev
 
 The server validates its environment settings and verifies the MongoDB connection before listening. Better Auth handles `/api/auth/*`; `GET /api/me` requires a Better Auth JWT verified against its JWKS endpoint. `GET /` and `GET /health` return the API liveness response. Unhandled request errors are returned through centralized error middleware, and `SIGINT`/`SIGTERM` gracefully close the HTTP server and MongoDB connection.
 
+## Book API
+
+All `/api/books` routes require a Better Auth JWT. `GET` lists the authenticated user's books, `POST` creates a book with `title`, `author`, and `category` (and an optional `description`), `PATCH /:id` updates supplied fields, and `DELETE /:id` removes a book. Book ownership is always taken from the verified token; clients cannot assign books to another user.
+
 ## Scripts
 
 - `npm run dev` — start with Node.js watch mode

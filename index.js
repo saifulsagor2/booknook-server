@@ -19,7 +19,11 @@ export async function startServer() {
       config,
     });
 
-    server = createApp(config.clientUrl, { auth, config }).listen(config.port, () => {
+    server = createApp(config.clientUrl, {
+      auth,
+      config,
+      database: getDatabase(),
+    }).listen(config.port, () => {
       console.log(`BookNook API listening on port ${config.port}.`);
     });
     await once(server, "listening");

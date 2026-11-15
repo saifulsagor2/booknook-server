@@ -4,6 +4,7 @@ import { toNodeHandler } from "better-auth/node";
 import { errorHandler } from "./middleware/error-handler.js";
 import { API_JWT_AUDIENCE } from "./config/auth.js";
 import { requireAuth } from "./middleware/require-auth.js";
+import { createBooksRouter } from "./routes/books.js";
 
 export function createApp(clientUrl = process.env.CLIENT_URL, authContext) {
   const app = express();
@@ -17,8 +18,9 @@ export function createApp(clientUrl = process.env.CLIENT_URL, authContext) {
     }),
   );
 
+  let booksRouter;
   if (authContext) {
-    const { auth, config } = authContext;
+    const { auth, config, database } = authContext;
     app.all("/api/auth/*splat", toNodeHandler(auth));
     const authenticate = requireAuth({
       jwksUrl: new URL("/api/auth/jwks", config.betterAuthUrl).href,
@@ -38,9 +40,18 @@ export function createApp(clientUrl = process.env.CLIENT_URL, authContext) {
         });
       },
     );
+    if (database) {
+      booksRouter = createBooksRouter({
+        collection: database.collection("books"),
+        authenticate,
+      });
+    }
   }
 
   app.use(express.json({ limit: "1mb" }));
+  if (booksRouter) {
+    app.use("/api/books", booksRouter);
+  }
 
   const healthCheck = (_req, res) => {
     res.status(200).json({
