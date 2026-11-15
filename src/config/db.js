@@ -12,11 +12,11 @@ export async function connectToDatabase(uri, dbName) {
     return database;
   }
 
-  const mongoClient = new MongoClient(uri, {
-    serverSelectionTimeoutMS: 10000,
-  });
-
+  let mongoClient;
   try {
+    mongoClient = new MongoClient(uri, {
+      serverSelectionTimeoutMS: 10000,
+    });
     await mongoClient.connect();
     const connectedDatabase = mongoClient.db(dbName);
     await connectedDatabase.command({ ping: 1 });
@@ -24,7 +24,17 @@ export async function connectToDatabase(uri, dbName) {
     database = connectedDatabase;
     return database;
   } catch (error) {
-    await mongoClient.close();
+    if (mongoClient) {
+      try {
+        await mongoClient.close();
+      } catch (closeError) {
+        throw new AggregateError(
+          [error, closeError],
+          "MongoDB connection failed and its client could not be closed.",
+          { cause: error },
+        );
+      }
+    }
     throw error;
   }
 }
