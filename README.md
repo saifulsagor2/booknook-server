@@ -9,14 +9,18 @@ The BookNook backend is a standalone Express API using the MongoDB Native Driver
 
 ## Setup
 
-Install dependencies and make a local environment file:
+Install dependencies and create a local environment file without replacing an existing one:
 
-```sh
+```powershell
 npm install
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
-Set `MONGODB_URI`, `MONGODB_DB_NAME`, and `CLIENT_URL` in `.env`. `PORT` is optional and defaults to `8000`. Keep `.env` private; only `.env.example` belongs in version control.
+Configure `MONGODB_URI`, `MONGODB_DB_NAME`, `CLIENT_URL`, `BETTER_AUTH_URL`, and `BETTER_AUTH_SECRET` in `.env`. `PORT` is optional and defaults to `8000`. `BETTER_AUTH_SECRET` must be a high-entropy secret of at least 32 characters; generate one with `openssl rand -base64 32`. Keep `.env` private.
+
+Google sign-in is enabled when both `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set. In Google Cloud Console, allow the redirect URI `http://localhost:8000/api/auth/callback/google` for local development.
+
+Better Auth stores users, sessions, accounts, verifications, and signing keys in the existing `MONGODB_DB_NAME` database. It does not create a separate authentication database.
 
 ## Development
 
@@ -24,7 +28,7 @@ Set `MONGODB_URI`, `MONGODB_DB_NAME`, and `CLIENT_URL` in `.env`. `PORT` is opti
 npm run dev
 ```
 
-The server verifies the MongoDB connection before listening. `GET /health` is the liveness endpoint and returns a JSON status response.
+The server validates its environment settings and verifies the MongoDB connection before listening. Better Auth handles `/api/auth/*`; `GET /api/me` requires a Better Auth JWT verified against its JWKS endpoint. `GET /` and `GET /health` return the API liveness response. Unhandled request errors are returned through centralized error middleware, and `SIGINT`/`SIGTERM` gracefully close the HTTP server and MongoDB connection.
 
 ## Scripts
 

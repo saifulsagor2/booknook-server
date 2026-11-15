@@ -2,7 +2,8 @@ import "dotenv/config";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createApp } from "./src/app.js";
-import { closeDatabase, connectToDatabase } from "./src/config/db.js";
+import { closeDatabase, connectToDatabase, getDatabase, getMongoClient } from "./src/config/db.js";
+import { createAuth } from "./src/config/auth.js";
 import { getConfig } from "./src/config/env.js";
 
 export async function startServer() {
@@ -11,8 +12,13 @@ export async function startServer() {
   try {
     const config = getConfig();
     await connectToDatabase(config.mongoUri, config.mongoDbName);
+    const auth = createAuth({
+      database: getDatabase(),
+      client: getMongoClient(),
+      config,
+    });
 
-    server = createApp(config.clientUrl).listen(config.port, () => {
+    server = createApp(config.clientUrl, { auth, config }).listen(config.port, () => {
       console.log(`BookNook API listening on port ${config.port}.`);
     });
 

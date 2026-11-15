@@ -37,6 +37,14 @@ export function getDatabase() {
   return database;
 }
 
+export function getMongoClient() {
+  if (!client) {
+    throw new Error("MongoDB has not been connected.");
+  }
+
+  return client;
+}
+
 export async function closeDatabase() {
   if (client) {
     await client.close();
