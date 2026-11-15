@@ -15,7 +15,8 @@ function createMemoryCollection() {
   const documents = [];
   const matches = (document, filter) =>
     (!filter._id || document._id.equals(filter._id)) &&
-    (!filter.ownerId || document.ownerId === filter.ownerId);
+    (!filter.ownerId || document.ownerId === filter.ownerId) &&
+    (!Object.hasOwn(filter, "isShared") || document.isShared === filter.isShared);
 
   return {
     find(filter) {
@@ -55,13 +56,14 @@ function createMemoryCollection() {
   };
 }
 
-async function startBooksServer(t, collection) {
+async function startBooksServer(t, collection, options = {}) {
   const app = express();
   app.use(express.json());
   app.use(
     "/api/books",
     createBooksRouter({
       collection,
+      ...options,
       authenticate(req, res, next) {
         const userId = req.get("authorization")?.match(/^Bearer (reader-\w+)$/)?.[1];
         if (!userId) {
@@ -270,4 +272,87 @@ test("book creation validates fields and does not accept a client-supplied owner
     headers: jsonHeaders("reader-one"),
   });
   assert.equal(invalidId.status, 404);
+});
+
+test("only explicitly shared books appear in the authenticated catalog", async (t) => {
+  const url = await startBooksServer(t, createMemoryCollection());
+  const privateBookResponse = await fetch(url, {
+    method: "POST",
+    headers: jsonHeaders("reader-one"),
+    body: JSON.stringify({
+      title: "Private Shelf",
+      author: "A. Reader",
+      category: "Fiction",
+    }),
+  });
+  const { book: privateBook } = await privateBookResponse.json();
+  assert.equal(privateBook.isShared, false);
+  assert.equal(privateBook.availableCopies, 0);
+
+  const sharedBookResponse = await fetch(url, {
+    method: "POST",
+    headers: jsonHeaders("reader-one"),
+    body: JSON.stringify({
+      title: "Shared Shelf",
+      author: "A. Reader",
+      category: "Fiction",
+      isShared: true,
+      availableCopies: 2,
+    }),
+  });
+  assert.equal(sharedBookResponse.status, 201);
+  const { book: sharedBook } = await sharedBookResponse.json();
+
+  const catalogResponse = await fetch(`${url}/catalog`, {
+    headers: jsonHeaders("reader-two"),
+  });
+  assert.equal(catalogResponse.status, 200);
+  const catalog = await catalogResponse.json();
+  assert.deepEqual(catalog.books.map((book) => book.id), [sharedBook.id]);
+  assert.equal(catalog.books[0].canBorrow, true);
+
+  const privateDetails = await fetch(`${url}/catalog/${privateBook.id}`, {
+    headers: jsonHeaders("reader-two"),
+  });
+  assert.equal(privateDetails.status, 404);
+
+  const invalidCopies = await fetch(url, {
+    method: "POST",
+    headers: jsonHeaders("reader-one"),
+    body: JSON.stringify({
+      title: "Invalid Copies",
+      author: "A. Reader",
+      category: "Fiction",
+      availableCopies: -1,
+    }),
+  });
+  assert.equal(invalidCopies.status, 400);
+});
+
+test("a book with an active loan cannot be removed", async (t) => {
+  const url = await startBooksServer(t, createMemoryCollection(), {
+    borrowsCollection: { findOne: async () => ({ status: "active" }) },
+  });
+  const createdResponse = await fetch(url, {
+    method: "POST",
+    headers: jsonHeaders("reader-one"),
+    body: JSON.stringify({
+      title: "Currently Borrowed",
+      author: "A. Reader",
+      category: "Fiction",
+    }),
+  });
+  const { book } = await createdResponse.json();
+
+  const otherReaderDelete = await fetch(`${url}/${book.id}`, {
+    method: "DELETE",
+    headers: jsonHeaders("reader-two"),
+  });
+  assert.equal(otherReaderDelete.status, 404);
+
+  const response = await fetch(`${url}/${book.id}`, {
+    method: "DELETE",
+    headers: jsonHeaders("reader-one"),
+  });
+  assert.equal(response.status, 409);
 });

@@ -6,6 +6,8 @@ const fields = {
   author: { label: "Author", maxLength: 100, required: true },
   category: { label: "Category", maxLength: 60, required: true },
   description: { label: "Description", maxLength: 1200, required: false },
+  availableCopies: { label: "Available copies", required: false },
+  isShared: { label: "Catalog sharing", required: false },
 };
 
 function parseBookInput(body, partial = false) {
@@ -27,9 +29,29 @@ function parseBookInput(body, partial = false) {
     if (value === undefined) {
       if (!partial && field === "description") {
         input[field] = "";
+      } else if (!partial && field === "availableCopies") {
+        input[field] = 0;
+      } else if (!partial && field === "isShared") {
+        input[field] = false;
       } else if (!partial && rules.required) {
         return { error: `${rules.label} is required.` };
       }
+      continue;
+    }
+
+    if (field === "availableCopies") {
+      if (!Number.isSafeInteger(value) || value < 0 || value > 10000) {
+        return { error: "Available copies must be a whole number between 0 and 10000." };
+      }
+      input[field] = value;
+      continue;
+    }
+
+    if (field === "isShared") {
+      if (typeof value !== "boolean") {
+        return { error: "Catalog sharing must be true or false." };
+      }
+      input[field] = value;
       continue;
     }
 
@@ -57,28 +79,63 @@ function toObjectId(id) {
   return /^[a-f\d]{24}$/i.test(id) ? new ObjectId(id) : undefined;
 }
 
-function serializeBook(book) {
+function serializeBook(book, userId) {
   return {
     id: book._id.toString(),
     title: book.title,
     author: book.author,
     category: book.category,
     description: book.description,
+    availableCopies: book.availableCopies ?? 0,
+    isShared: book.isShared === true,
+    canBorrow: book.ownerId !== userId && book.isShared === true,
     createdAt: book.createdAt,
     updatedAt: book.updatedAt,
   };
 }
 
-export function createBooksRouter({ collection, authenticate }) {
+class ActiveBorrowError extends Error {}
+
+export function createBooksRouter({
+  collection,
+  authenticate,
+  borrowsCollection,
+  client,
+}) {
   const router = Router();
   router.use(authenticate);
+
+  router.get("/catalog", async (req, res) => {
+    const books = await collection
+      .find({ isShared: true })
+      .sort({ createdAt: -1, _id: -1 })
+      .toArray();
+    return res.status(200).json({
+      books: books.map((book) => serializeBook(book, req.auth.userId)),
+    });
+  });
+
+  router.get("/catalog/:id", async (req, res) => {
+    const id = toObjectId(req.params.id);
+    if (!id) {
+      return res.status(404).json({ message: "Book not found." });
+    }
+
+    const book = await collection.findOne({ _id: id, isShared: true });
+    if (!book) {
+      return res.status(404).json({ message: "Book not found." });
+    }
+    return res.status(200).json({ book: serializeBook(book, req.auth.userId) });
+  });
 
   router.get("/", async (req, res) => {
     const books = await collection
       .find({ ownerId: req.auth.userId })
       .sort({ createdAt: -1, _id: -1 })
       .toArray();
-    res.status(200).json({ books: books.map(serializeBook) });
+    res.status(200).json({
+      books: books.map((book) => serializeBook(book, req.auth.userId)),
+    });
   });
 
   router.post("/", async (req, res) => {
@@ -132,14 +189,57 @@ export function createBooksRouter({ collection, authenticate }) {
       return res.status(404).json({ message: "Book not found." });
     }
 
-    const result = await collection.deleteOne({
-      _id: id,
-      ownerId: req.auth.userId,
-    });
-    if (result.deletedCount === 0) {
-      return res.status(404).json({ message: "Book not found." });
+    const deleteBook = async (session) => {
+      const options = session ? { session } : undefined;
+      const ownedBook = await collection.findOne(
+        { _id: id, ownerId: req.auth.userId },
+        options,
+      );
+      if (!ownedBook) {
+        return { deletedCount: 0 };
+      }
+
+      if (borrowsCollection) {
+        const activeBorrow = await borrowsCollection.findOne(
+          { bookId: id, status: "active" },
+          options,
+        );
+        if (activeBorrow) {
+          throw new ActiveBorrowError("Return active loans before removing this book.");
+        }
+      }
+
+      return collection.deleteOne(
+        { _id: id, ownerId: req.auth.userId },
+        options,
+      );
+    };
+
+    try {
+      let result;
+      if (client && borrowsCollection) {
+        const session = client.startSession();
+        try {
+          await session.withTransaction(async () => {
+            result = await deleteBook(session);
+          });
+        } finally {
+          await session.endSession();
+        }
+      } else {
+        result = await deleteBook();
+      }
+
+      if (result.deletedCount === 0) {
+        return res.status(404).json({ message: "Book not found." });
+      }
+      return res.status(204).end();
+    } catch (error) {
+      if (error instanceof ActiveBorrowError) {
+        return res.status(409).json({ message: error.message });
+      }
+      throw error;
     }
-    return res.status(204).end();
   });
 
   return router;

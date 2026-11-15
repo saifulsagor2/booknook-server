@@ -23,6 +23,7 @@ export async function startServer() {
       auth,
       config,
       database: getDatabase(),
+      client: getMongoClient(),
     }).listen(config.port, () => {
       console.log(`BookNook API listening on port ${config.port}.`);
     });

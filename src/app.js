@@ -5,6 +5,7 @@ import { errorHandler } from "./middleware/error-handler.js";
 import { API_JWT_AUDIENCE } from "./config/auth.js";
 import { requireAuth } from "./middleware/require-auth.js";
 import { createBooksRouter } from "./routes/books.js";
+import { createBorrowsRouter } from "./routes/borrows.js";
 
 export function createApp(clientUrl = process.env.CLIENT_URL, authContext) {
   const app = express();
@@ -19,8 +20,9 @@ export function createApp(clientUrl = process.env.CLIENT_URL, authContext) {
   );
 
   let booksRouter;
+  let borrowsRouter;
   if (authContext) {
-    const { auth, config, database } = authContext;
+    const { auth, config, database, client } = authContext;
     app.all("/api/auth/*splat", toNodeHandler(auth));
     const authenticate = requireAuth({
       jwksUrl: new URL("/api/auth/jwks", config.betterAuthUrl).href,
@@ -41,16 +43,31 @@ export function createApp(clientUrl = process.env.CLIENT_URL, authContext) {
       },
     );
     if (database) {
+      const booksCollection = database.collection("books");
+      const borrowsCollection = database.collection("borrows");
       booksRouter = createBooksRouter({
-        collection: database.collection("books"),
+        collection: booksCollection,
         authenticate,
+        borrowsCollection,
+        client,
       });
+      if (client) {
+        borrowsRouter = createBorrowsRouter({
+          booksCollection,
+          borrowsCollection,
+          client,
+          authenticate,
+        });
+      }
     }
   }
 
   app.use(express.json({ limit: "1mb" }));
   if (booksRouter) {
     app.use("/api/books", booksRouter);
+  }
+  if (borrowsRouter) {
+    app.use("/api/borrows", borrowsRouter);
   }
 
   const healthCheck = (_req, res) => {
