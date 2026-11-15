@@ -84,6 +84,17 @@ For Render, create a Web Service from the `booknook-server` repository with Node
 
 If Google sign-in is enabled, configure both Google credentials and allow `${BETTER_AUTH_URL}/api/auth/callback/google` in Google Cloud Console. This repository has no provider-specific deployment configuration, and a production deployment has not been verified. See [MongoDB Atlas configuration](#mongodb-atlas-configuration) for database and transaction requirements.
 
+### Post-deployment verification
+
+These are checks to perform after deploying; production behavior has not yet been verified:
+
+- Confirm the service starts and `GET /health` returns HTTP 200.
+- Send a CORS preflight request from the deployed frontend origin and confirm that origin is allowed; requests from other origins should not receive credentialed CORS access.
+- Confirm `GET /api/books` without a bearer token returns 401, then register/login and verify an authenticated JWT request succeeds.
+- Using a disposable test account and database, create, list, view, update, and delete an owned book; confirm ownership restrictions for a second account.
+- Borrow a shared book and confirm stock decreases, duplicate active borrowing is rejected, and return restores stock while preserving history.
+- Confirm the frontend can refresh nested routes and complete these workflows without browser CORS, network, or authentication errors.
+
 ## Scripts
 
 - `npm run dev` — start with Node.js watch mode
