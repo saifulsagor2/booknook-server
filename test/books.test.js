@@ -176,11 +176,75 @@ test("the integrated books route parses JSON after Better Auth verifies the JWT"
   assert.equal((await response.json()).book.title, "A Test Book");
 });
 
-test("book CRUD is authenticated and scoped to the owning user", async (t) => {
+test("book list and details are public without exposing private books", async (t) => {
   const url = await startBooksServer(t, createMemoryCollection());
+  const privateResponse = await fetch(url, {
+    method: "POST",
+    headers: jsonHeaders("reader-one"),
+    body: JSON.stringify({
+      title: "Private Shelf",
+      author: "A. Reader",
+      category: "Fiction",
+    }),
+  });
+  const { book: privateBook } = await privateResponse.json();
 
-  const unauthenticated = await fetch(url);
-  assert.equal(unauthenticated.status, 401);
+  const sharedResponse = await fetch(url, {
+    method: "POST",
+    headers: jsonHeaders("reader-one"),
+    body: JSON.stringify({
+      title: "Shared Shelf",
+      author: "A. Reader",
+      category: "Fiction",
+      isShared: true,
+      availableCopies: 1,
+    }),
+  });
+  const { book: sharedBook } = await sharedResponse.json();
+
+  const publicListResponse = await fetch(url);
+  assert.equal(publicListResponse.status, 200);
+  assert.deepEqual(
+    (await publicListResponse.json()).books.map((book) => book.id),
+    [sharedBook.id],
+  );
+
+  const publicSharedDetails = await fetch(`${url}/${sharedBook.id}`);
+  assert.equal(publicSharedDetails.status, 200);
+  assert.equal((await publicSharedDetails.json()).book.canBorrow, false);
+
+  const publicPrivateDetails = await fetch(`${url}/${privateBook.id}`);
+  assert.equal(publicPrivateDetails.status, 404);
+
+  const publicCatalogResponse = await fetch(`${url}/catalog`);
+  assert.equal(publicCatalogResponse.status, 401);
+
+  const publicCreateResponse = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: "Unauthenticated Book",
+      author: "A. Reader",
+      category: "Fiction",
+    }),
+  });
+  assert.equal(publicCreateResponse.status, 401);
+
+  const publicUpdateResponse = await fetch(`${url}/${sharedBook.id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: "Changed title" }),
+  });
+  assert.equal(publicUpdateResponse.status, 401);
+
+  const publicDeleteResponse = await fetch(`${url}/${sharedBook.id}`, {
+    method: "DELETE",
+  });
+  assert.equal(publicDeleteResponse.status, 401);
+});
+
+test("authenticated book CRUD remains scoped to the owning user", async (t) => {
+  const url = await startBooksServer(t, createMemoryCollection());
 
   const createdResponse = await fetch(url, {
     method: "POST",

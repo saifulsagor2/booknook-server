@@ -88,7 +88,7 @@ function serializeBook(book, userId) {
     description: book.description,
     availableCopies: book.availableCopies ?? 0,
     isShared: book.isShared === true,
-    canBorrow: book.ownerId !== userId && book.isShared === true,
+    canBorrow: Boolean(userId && book.ownerId !== userId && book.isShared === true),
     createdAt: book.createdAt,
     updatedAt: book.updatedAt,
   };
@@ -103,9 +103,14 @@ export function createBooksRouter({
   client,
 }) {
   const router = Router();
-  router.use(authenticate);
+  const authenticateIfProvided = (req, res, next) => {
+    if (!req.get("authorization")) {
+      return next();
+    }
+    return authenticate(req, res, next);
+  };
 
-  router.get("/catalog", async (req, res) => {
+  router.get("/catalog", authenticate, async (req, res) => {
     const books = await collection
       .find({ isShared: true })
       .sort({ createdAt: -1, _id: -1 })
@@ -115,7 +120,7 @@ export function createBooksRouter({
     });
   });
 
-  router.get("/catalog/:id", async (req, res) => {
+  router.get("/catalog/:id", authenticate, async (req, res) => {
     const id = toObjectId(req.params.id);
     if (!id) {
       return res.status(404).json({ message: "Book not found." });
@@ -128,36 +133,42 @@ export function createBooksRouter({
     return res.status(200).json({ book: serializeBook(book, req.auth.userId) });
   });
 
-  router.get("/:id", async (req, res) => {
+  router.get("/:id", authenticateIfProvided, async (req, res) => {
     const id = toObjectId(req.params.id);
     if (!id) {
       return res.status(404).json({ message: "Book not found." });
     }
 
-    let book = await collection.findOne({
-      _id: id,
-      ownerId: req.auth.userId,
-    });
+    let book;
+    if (req.auth?.userId) {
+      book = await collection.findOne({
+        _id: id,
+        ownerId: req.auth.userId,
+      });
+    }
     if (!book) {
       book = await collection.findOne({ _id: id, isShared: true });
     }
     if (!book) {
       return res.status(404).json({ message: "Book not found." });
     }
-    return res.status(200).json({ book: serializeBook(book, req.auth.userId) });
+    return res.status(200).json({ book: serializeBook(book, req.auth?.userId) });
   });
 
-  router.get("/", async (req, res) => {
+  router.get("/", authenticateIfProvided, async (req, res) => {
+    const filter = req.auth?.userId
+      ? { ownerId: req.auth.userId }
+      : { isShared: true };
     const books = await collection
-      .find({ ownerId: req.auth.userId })
+      .find(filter)
       .sort({ createdAt: -1, _id: -1 })
       .toArray();
     res.status(200).json({
-      books: books.map((book) => serializeBook(book, req.auth.userId)),
+      books: books.map((book) => serializeBook(book, req.auth?.userId)),
     });
   });
 
-  router.post("/", async (req, res) => {
+  router.post("/", authenticate, async (req, res) => {
     const parsed = parseBookInput(req.body);
     if (parsed.error) {
       return res.status(400).json({ message: parsed.error });
@@ -176,7 +187,7 @@ export function createBooksRouter({
       .json({ book: serializeBook({ ...book, _id: result.insertedId }) });
   });
 
-  router.patch("/:id", async (req, res) => {
+  router.patch("/:id", authenticate, async (req, res) => {
     const id = toObjectId(req.params.id);
     if (!id) {
       return res.status(404).json({ message: "Book not found." });
@@ -202,7 +213,7 @@ export function createBooksRouter({
     return res.status(200).json({ book: serializeBook(book) });
   });
 
-  router.delete("/:id", async (req, res) => {
+  router.delete("/:id", authenticate, async (req, res) => {
     const id = toObjectId(req.params.id);
     if (!id) {
       return res.status(404).json({ message: "Book not found." });
